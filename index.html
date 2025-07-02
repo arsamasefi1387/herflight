@@ -366,6 +366,14 @@
             color: #8B4A8C;
         }
         
+        .storage-info {
+            margin-top: 10px;
+            font-size: 0.8rem;
+            opacity: 0.6;
+            color: #8B4A8C;
+            font-style: italic;
+        }
+        
         .hidden {
             display: none;
         }
@@ -399,6 +407,17 @@
             padding: 15px;
             margin-top: 15px;
             color: #2E7D32;
+            font-weight: 600;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .warning-message {
+            background: rgba(255, 152, 0, 0.2);
+            border: 2px solid rgba(255, 152, 0, 0.4);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 15px;
+            color: #E65100;
             font-weight: 600;
             animation: fadeIn 0.5s ease-out;
         }
@@ -484,18 +503,50 @@
             </div>
             
             <div class="photo-counter" id="photoCounter">No photos uploaded yet</div>
+            <div class="storage-info">💡 Photos are saved in your browser and will persist between visits!</div>
             <div class="photo-gallery" id="photoGallery"></div>
             <div id="successMessage"></div>
         </div>
     </div>
 
     <script>
-        // Photo storage
+        // Photo storage with localStorage support
         let photos = [];
         let photoIdCounter = 1;
 
         // Manual override: set to 'AC9', 'AC6283', 'AC6282', 'AC10', 'tokyo', 'tokyo2', 'vietnam', 'home', or 'auto' for automatic
         const manualFlightPhase = 'AC9'; // Change this to match the real phase
+
+        // Storage functions
+        function savePhotosToStorage() {
+            try {
+                localStorage.setItem('huongTravelPhotos', JSON.stringify(photos));
+                localStorage.setItem('huongPhotoCounter', photoIdCounter.toString());
+            } catch (e) {
+                console.warn('Could not save photos to localStorage:', e);
+                showWarningMessage('⚠️ Photos may not persist after page reload in this environment');
+            }
+        }
+
+        function loadPhotosFromStorage() {
+            try {
+                const savedPhotos = localStorage.getItem('huongTravelPhotos');
+                const savedCounter = localStorage.getItem('huongPhotoCounter');
+                
+                if (savedPhotos) {
+                    photos = JSON.parse(savedPhotos);
+                    console.log('Loaded', photos.length, 'photos from storage');
+                }
+                
+                if (savedCounter) {
+                    photoIdCounter = parseInt(savedCounter);
+                }
+            } catch (e) {
+                console.warn('Could not load photos from localStorage:', e);
+                photos = [];
+                photoIdCounter = 1;
+            }
+        }
 
         // Update countdown timer - target: August 18, 2025 at 4:05 PM EDT (20:05 UTC)
         function updateCountdown() {
@@ -651,12 +702,14 @@
                 timestamp: new Date().toISOString()
             };
             photos.push(photo);
+            savePhotosToStorage();
             renderPhotoGallery();
             showSuccessMessage(`Added "${name}" to gallery! 💕`);
         }
 
         function removePhoto(id) {
             photos = photos.filter(photo => photo.id !== id);
+            savePhotosToStorage();
             renderPhotoGallery();
             showSuccessMessage('Photo removed from gallery!');
         }
@@ -701,7 +754,7 @@
 
         function downloadAllPhotos() {
             if (photos.length === 0) {
-                showSuccessMessage('No photos to download!', 'error');
+                showWarningMessage('No photos to download!');
                 return;
             }
             
@@ -716,12 +769,13 @@
 
         function clearAllPhotos() {
             if (photos.length === 0) {
-                showSuccessMessage('Gallery is already empty!', 'error');
+                showWarningMessage('Gallery is already empty!');
                 return;
             }
             
             if (confirm(`Are you sure you want to remove all ${photos.length} photos?`)) {
                 photos = [];
+                savePhotosToStorage();
                 renderPhotoGallery();
                 showSuccessMessage('Gallery cleared! 🗑️');
             }
@@ -729,13 +783,13 @@
 
         function createPhotoZip() {
             if (photos.length === 0) {
-                showSuccessMessage('No photos to pack!', 'error');
+                showWarningMessage('No photos to pack!');
                 return;
             }
             showSuccessMessage(`Created photo pack with ${photos.length} photos! 📦💕`);
         }
 
-        function showSuccessMessage(message, type = 'success') {
+        function showSuccessMessage(message) {
             const messageEl = document.getElementById('successMessage');
             messageEl.innerHTML = `<div class="success-message">${message}</div>`;
             setTimeout(() => {
@@ -743,12 +797,22 @@
             }, 3000);
         }
 
+        function showWarningMessage(message) {
+            const messageEl = document.getElementById('successMessage');
+            messageEl.innerHTML = `<div class="warning-message">${message}</div>`;
+            setTimeout(() => {
+                messageEl.innerHTML = '';
+            }, 4000);
+        }
+
         // Initialize everything
         function init() {
+            loadPhotosFromStorage();
             createFloatingElements();
             initPhotoUpload();
             updateFlightInfo();
             updateCountdown();
+            renderPhotoGallery(); // Render any photos that were loaded from storage
             
             // Update countdown every second
             setInterval(updateCountdown, 1000);
