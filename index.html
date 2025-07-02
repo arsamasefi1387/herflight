@@ -306,11 +306,16 @@
             object-fit: cover;
         }
         
-        .photo-delete {
+        .photo-controls {
             position: absolute;
             top: 5px;
             right: 5px;
-            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            gap: 5px;
+        }
+        
+        .photo-btn {
+            background: rgba(255, 255, 255, 0.9);
             border: none;
             border-radius: 50%;
             width: 25px;
@@ -318,6 +323,47 @@
             cursor: pointer;
             font-size: 0.8rem;
             color: #E91E63;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .photo-btn:hover {
+            background: rgba(233, 30, 99, 0.9);
+            color: white;
+        }
+        
+        .gallery-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(233, 30, 99, 0.4);
+            border-radius: 25px;
+            padding: 10px 20px;
+            color: #8B4A8C;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .control-btn:hover {
+            background: rgba(233, 30, 99, 0.2);
+            border-color: #E91E63;
+        }
+        
+        .photo-counter {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            color: #8B4A8C;
         }
         
         .hidden {
@@ -345,6 +391,18 @@
             margin-top: 15px;
         }
         
+        /* Success message */
+        .success-message {
+            background: rgba(76, 175, 80, 0.2);
+            border: 2px solid rgba(76, 175, 80, 0.4);
+            border-radius: 15px;
+            padding: 15px;
+            margin-top: 15px;
+            color: #2E7D32;
+            font-weight: 600;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
         @media (max-width: 768px) {
             .title { font-size: 2rem; }
             .subtitle { font-size: 1.1rem; }
@@ -352,6 +410,8 @@
             .time-unit { min-width: 60px; padding: 10px; }
             .time-value { font-size: 1.5rem; }
             .glass-card { padding: 20px; margin: 15px 0; }
+            .gallery-controls { flex-direction: column; }
+            .control-btn { width: 100%; }
         }
     </style>
 </head>
@@ -416,49 +476,33 @@
                 <div class="upload-hint">Click here or drag & drop photos to upload</div>
             </div>
             <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
+            
+            <div class="gallery-controls">
+                <button class="control-btn" onclick="downloadAllPhotos()">📥 Download All Photos</button>
+                <button class="control-btn" onclick="clearAllPhotos()">🗑️ Clear Gallery</button>
+                <button class="control-btn" onclick="createPhotoZip()">📦 Create Photo Pack</button>
+            </div>
+            
+            <div class="photo-counter" id="photoCounter">No photos uploaded yet</div>
             <div class="photo-gallery" id="photoGallery"></div>
+            <div id="successMessage"></div>
         </div>
     </div>
 
     <script>
-        // Flight data with all times in UTC
-        let flightData = {
-            AC9: { 
-                status: 'unknown', 
-                departure: new Date(Date.UTC(2025, 6, 1, 17, 25)), // 2025-07-01 17:25 UTC (13:25 EDT)
-                arrival: new Date(Date.UTC(2025, 6, 2, 6, 25)),    // 2025-07-02 06:25 UTC (15:25 JST)
-                route: 'Toronto → Tokyo', 
-                progress: 0 
-            },
-            AC6283: { 
-                status: 'unknown', 
-                departure: new Date(Date.UTC(2025, 6, 2, 10, 0)), // 2025-07-02 10:00 UTC (19:00 JST)
-                arrival: new Date(Date.UTC(2025, 6, 2, 15, 30)),  // 2025-07-02 15:30 UTC (22:30 Vietnam)
-                route: 'Tokyo → Vietnam', 
-                progress: 0 
-            },
-            AC6282: { 
-                status: 'unknown', 
-                departure: new Date(Date.UTC(2025, 7, 18, 3, 0)), // 2025-08-18 03:00 UTC (10:00 Vietnam)
-                arrival: new Date(Date.UTC(2025, 7, 18, 7, 0)),   // 2025-08-18 07:00 UTC (16:00 JST)
-                route: 'Vietnam → Tokyo', 
-                progress: 0 
-            },
-            AC10: { 
-                status: 'unknown', 
-                departure: new Date(Date.UTC(2025, 7, 18, 9, 30)), // 2025-08-18 09:30 UTC (18:30 JST)
-                arrival: new Date(Date.UTC(2025, 7, 18, 19, 30)),  // 2025-08-18 19:30 UTC (15:30 EDT)
-                route: 'Tokyo → Toronto', 
-                progress: 0 
-            }
-        };
+        // Photo storage
+        let photos = [];
+        let photoIdCounter = 1;
 
-        // Update countdown timer
+        // Manual override: set to 'AC9', 'AC6283', 'AC6282', 'AC10', 'tokyo', 'tokyo2', 'vietnam', 'home', or 'auto' for automatic
+        const manualFlightPhase = 'AC9'; // Change this to match the real phase
+
+        // Update countdown timer - target: August 18, 2025 at 4:05 PM EDT (20:05 UTC)
         function updateCountdown() {
-            const nowUTC = Date.now();
-            const targetUTC = Date.UTC(2025, 7, 18, 20, 5); // 2025-08-18 16:05 EDT = 20:05 UTC
-            const tripStartUTC = Date.UTC(2025, 6, 1, 17, 25); // 2025-07-01 13:25 EDT = 17:25 UTC
-            const timeDiff = targetUTC - nowUTC;
+            const now = new Date();
+            const target = new Date(2025, 7, 18, 16, 5, 0); // August 18, 2025, 4:05 PM (local time)
+            const tripStart = new Date(2025, 6, 1, 13, 25, 0); // July 1, 2025, 1:25 PM (local time)
+            const timeDiff = target - now;
             
             if (timeDiff > 0) {
                 const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
@@ -472,8 +516,8 @@
                 document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
                 
                 // Calculate progress from trip start to return
-                const totalTripTime = targetUTC - tripStartUTC;
-                const elapsedTime = nowUTC - tripStartUTC;
+                const totalTripTime = target - tripStart;
+                const elapsedTime = now - tripStart;
                 const progressPercent = Math.max(0, Math.min(100, (elapsedTime / totalTripTime) * 100));
                 
                 document.getElementById('progressFill').style.width = progressPercent + '%';
@@ -487,360 +531,234 @@
             }
         }
 
-        // Estimate flight status based on current UTC time
-        function estimateFlightStatus() {
-            const nowUTC = Date.now();
-            try {
-                for (const [flightCode, flight] of Object.entries(flightData)) {
-                    const departureTime = flight.departure.getTime();
-                    const arrivalTime = flight.arrival.getTime();
-                    // Validate time values
-                    if (isNaN(departureTime) || isNaN(arrivalTime)) {
-                        console.error(`Invalid date for flight ${flightCode}`);
-                        continue;
-                    }
-                    // Calculate status with 15-minute buffer for departures
-                    if (nowUTC < departureTime - (15 * 60 * 1000)) {
-                        flight.status = 'scheduled';
-                        flight.progress = 0;
-                    } else if (nowUTC >= departureTime - (15 * 60 * 1000) && nowUTC <= arrivalTime + (30 * 60 * 1000)) {
-                        flight.status = 'active';
-                        const totalFlightTime = arrivalTime - departureTime;
-                        const elapsedTime = nowUTC - departureTime;
-                        flight.progress = Math.min(100, Math.max(0, (elapsedTime / totalFlightTime) * 100));
-                    } else {
-                        flight.status = 'landed';
-                        flight.progress = 100;
-                    }
-                }
-            } catch (error) {
-                console.error('Error in estimateFlightStatus:', error);
-            }
-        }
-
-        // Manual override: set to 'AC9', 'AC6283', 'AC6282', 'AC10', 'tokyo', 'tokyo2', 'vietnam', 'home', or 'auto' for automatic
-        const manualFlightPhase = 'AC9'; // Change this to match the real phase, or 'auto' for automatic
-
         // Update flight information display
         function updateFlightInfo() {
-            try {
-                const nowUTC = Date.now();
-                let locationMessage = "";
-                let statusMessage = "";
-                // Manual override
-                if (manualFlightPhase !== 'auto') {
-                    switch(manualFlightPhase) {
-                        case 'AC9':
-                            locationMessage = "FLYING OVER THE PACIFIC BÉ";
-                            statusMessage = "AC9 to Tokyo - almost there! Em is crossing the ocean! 🌊✈️";
-                            break;
-                        case 'tokyo':
-                            locationMessage = "LANDED IN TOKYO BÉ";
-                            statusMessage = "Em is in Tokyo! Time for connecting flight soon! 🗾✈️";
-                            break;
-                        case 'AC6283':
-                            locationMessage = "FLYING TO VIETNAM EM";
-                            statusMessage = "AC6283 to Vietnam - almost home bé! 🇻🇳✈️";
-                            break;
-                        case 'vietnam':
-                            locationMessage = "WELCOME HOME BÉ";
-                            statusMessage = "My love is in Vietnam! 🇻🇳💕";
-                            break;
-                        case 'AC6282':
-                            locationMessage = "COMING BACK TO ME";
-                            statusMessage = "AC6282 bringing em back! 💕✈️";
-                            break;
-                        case 'tokyo2':
-                            locationMessage = "BACK IN TOKYO BÉ";
-                            statusMessage = "Em is in Tokyo again! Final connection home soon! 🗾✈️";
-                            break;
-                        case 'AC10':
-                            locationMessage = "ALMOST HOME BÉ";
-                            statusMessage = "Final flight AC10 - almost home! 🏠💕";
-                            break;
-                        case 'home':
-                            locationMessage = "WELCOME HOME MY LOVE";
-                            statusMessage = "Em is back in my arms! 💕🏠";
-                            break;
-                        default:
-                            locationMessage = "MY BEAUTIFUL TRAVELER";
-                            statusMessage = "Bé is somewhere wonderful! 💕✈️";
-                    }
-                } else {
-                    // Automatic mode
-                    estimateFlightStatus();
-                    const currentFlight = getCurrentFlight(nowUTC);
-                    if (currentFlight && flightData[currentFlight]) {
-                        const flight = flightData[currentFlight];
-                        if (flight.status === 'active') {
-                            const progressPercent = Math.round(flight.progress);
-                            switch(currentFlight) {
-                                case 'AC9':
-                                    locationMessage = "FLYING OVER THE PACIFIC BÉ";
-                                    statusMessage = `${currentFlight} to Tokyo - ${progressPercent}% complete! Em is crossing the ocean! 🌊✈️`;
-                                    break;
-                                case 'AC6283':
-                                    locationMessage = "FLYING TO VIETNAM EM";
-                                    statusMessage = `${currentFlight} to Vietnam - ${progressPercent}% there! Almost home bé! 🇻🇳✈️`;
-                                    break;
-                                case 'AC6282':
-                                    locationMessage = "COMING BACK TO ME";
-                                    statusMessage = `${currentFlight} bringing em back - ${progressPercent}% complete! 💕✈️`;
-                                    break;
-                                case 'AC10':
-                                    locationMessage = "ALMOST HOME BÉ";
-                                    statusMessage = `Final flight ${currentFlight} - ${progressPercent}% home! 🏠💕`;
-                                    break;
-                            }
-                        } else if (flight.status === 'landed') {
-                            switch(currentFlight) {
-                                case 'AC9':
-                                    locationMessage = "LANDED IN TOKYO BÉ";
-                                    statusMessage = `${currentFlight} landed safely! Time for connecting flight! 🗾✈️`;
-                                    break;
-                                case 'AC6283':
-                                    locationMessage = "WELCOME HOME EM";
-                                    statusMessage = `${currentFlight} landed! Em is in Vietnam! 🇻🇳💕`;
-                                    break;
-                                case 'AC6282':
-                                    locationMessage = "BACK IN TOKYO BÉ";
-                                    statusMessage = `${currentFlight} landed! Final connection home! 🗾✈️`;
-                                    break;
-                                case 'AC10':
-                                    locationMessage = "WELCOME HOME MY LOVE";
-                                    statusMessage = `${currentFlight} landed! Em is back in Toronto! 🏠💕`;
-                                    break;
-                            }
-                        } else if (flight.status === 'scheduled') {
-                            const timeToFlight = flight.departure.getTime() - nowUTC;
-                            const hoursToFlight = Math.ceil(timeToFlight / (1000 * 60 * 60));
-                            if (hoursToFlight <= 24 && hoursToFlight > 0) {
-                                locationMessage = "GETTING READY BÉ";
-                                statusMessage = `${currentFlight} departs in ${hoursToFlight} hours! Almost time! ✈️💕`;
-                            }
-                        }
-                    }
-                    // Default messages if no active flight
-                    if (!locationMessage) {
-                        // Use UTC for date comparisons
-                        const nowDate = new Date(nowUTC);
-                        const todayUTC = nowDate.toISOString().slice(0, 10);
-                        const july1 = '2025-07-01';
-                        const aug18 = '2025-08-18';
-                        if (todayUTC === july1) {
-                            locationMessage = "DEPARTURE DAY BÉ";
-                            statusMessage = "Big adventure starts today! Have the best time! ✈️💕";
-                        } else if (nowUTC >= Date.UTC(2025, 6, 2, 0, 0) && nowUTC < Date.UTC(2025, 7, 18, 0, 0)) {
-                            locationMessage = "ENJOYING VIETNAM EM";
-                            statusMessage = "Having amazing time! Missing you every day! 🇻🇳💕";
-                        } else if (todayUTC === aug18) {
-                            locationMessage = "COMING HOME DAY";
-                            statusMessage = "Today em comes back to me! Can't wait! 🏠💕";
-                        } else if (nowUTC >= Date.UTC(2025, 7, 18, 20, 5)) {
-                            locationMessage = "WELCOME HOME MY LOVE";
-                            statusMessage = "Em is back in my arms! 💕🏠";
-                        } else {
-                            locationMessage = "MY BEAUTIFUL TRAVELER";
-                            statusMessage = "Bé is somewhere wonderful! 💕✈️";
-                        }
-                    }
-                }
-                // Update the DOM with new information
-                const locationEl = document.getElementById('currentLocation');
-                const statusEl = document.getElementById('flightStatus');
-                const updateTimeEl = document.getElementById('updateTime');
-                if (locationEl && statusEl && updateTimeEl) {
-                    locationEl.textContent = locationMessage;
-                    statusEl.textContent = statusMessage;
-                    updateTimeEl.textContent = `Last updated: ${new Date(nowUTC).toUTCString()}`;
-                } else {
-                    console.error('Required DOM elements not found');
-                }
-            } catch (error) {
-                console.error('Error in updateFlightInfo:', error);
-                // Show a fallback message if there's an error
-                const locationEl = document.getElementById('currentLocation');
-                const statusEl = document.getElementById('flightStatus');
-                if (locationEl && statusEl) {
-                    locationEl.textContent = "MY BEAUTIFUL TRAVELER";
-                    statusEl.textContent = "Tracking system is taking a little break! 💕✈️";
-                }
+            let locationMessage = "";
+            let statusMessage = "";
+            
+            switch(manualFlightPhase) {
+                case 'AC9':
+                    locationMessage = "FLYING OVER THE PACIFIC BÉ";
+                    statusMessage = "AC9 to Tokyo - almost there! Em is crossing the ocean! 🌊✈️";
+                    break;
+                case 'tokyo':
+                    locationMessage = "LANDED IN TOKYO BÉ";
+                    statusMessage = "Em is in Tokyo! Time for connecting flight soon! 🗾✈️";
+                    break;
+                case 'AC6283':
+                    locationMessage = "FLYING TO VIETNAM EM";
+                    statusMessage = "AC6283 to Vietnam - almost home bé! 🇻🇳✈️";
+                    break;
+                case 'vietnam':
+                    locationMessage = "WELCOME HOME BÉ";
+                    statusMessage = "My love is in Vietnam! 🇻🇳💕";
+                    break;
+                case 'AC6282':
+                    locationMessage = "COMING BACK TO ME";
+                    statusMessage = "AC6282 bringing em back! 💕✈️";
+                    break;
+                case 'tokyo2':
+                    locationMessage = "BACK IN TOKYO BÉ";
+                    statusMessage = "Em is in Tokyo again! Final connection home soon! 🗾✈️";
+                    break;
+                case 'AC10':
+                    locationMessage = "ALMOST HOME BÉ";
+                    statusMessage = "Final flight AC10 - almost home! 🏠💕";
+                    break;
+                case 'home':
+                    locationMessage = "WELCOME HOME MY LOVE";
+                    statusMessage = "Em is back in my arms! 💕🏠";
+                    break;
+                default:
+                    locationMessage = "MY BEAUTIFUL TRAVELER";
+                    statusMessage = "Bé is somewhere wonderful! 💕✈️";
             }
+            
+            document.getElementById('currentLocation').textContent = locationMessage;
+            document.getElementById('flightStatus').textContent = statusMessage;
+            document.getElementById('updateTime').textContent = `Last updated: ${new Date().toLocaleString()}`;
         }
 
-        // Get currently relevant flight (pass nowUTC for accuracy)
-        function getCurrentFlight(nowUTC) {
-            try {
-                let currentFlight = null;
-                let minTimeDiff = Infinity;
-                for (const [flightCode, flight] of Object.entries(flightData)) {
-                    const departureTime = flight.departure.getTime();
-                    const arrivalTime = flight.arrival.getTime();
-                    // Validate time values
-                    if (isNaN(departureTime) || isNaN(arrivalTime)) {
-                        continue;
-                    }
-                    // Active flight takes highest priority
-                    if (nowUTC >= departureTime - (15 * 60 * 1000) && nowUTC <= arrivalTime + (30 * 60 * 1000)) {
-                        return flightCode;
-                    }
-                    // For scheduled flights, find the closest upcoming one
-                    if (nowUTC < departureTime) {
-                        const timeDiff = departureTime - nowUTC;
-                        if (timeDiff < minTimeDiff && timeDiff <= (24 * 60 * 60 * 1000)) {
-                            minTimeDiff = timeDiff;
-                            currentFlight = flightCode;
-                        }
-                    }
-                    // Show recently landed flights
-                    if (flight.status === 'landed') {
-                        const landedDiff = nowUTC - arrivalTime;
-                        if (landedDiff <= (2 * 60 * 60 * 1000)) {
-                            return flightCode;
-                        }
-                    }
-                }
-                return currentFlight;
-            } catch (error) {
-                console.error('Error in getCurrentFlight:', error);
-                return null;
-            }
-        }
-
-        // Create cute background elements
-        function createBackgroundElements() {
+        // Create floating background elements
+        function createFloatingElements() {
             const container = document.querySelector('.background-elements');
+            const elements = ['💕', '✨', '✈️', 'Huong'];
+            const classes = ['floating-heart', 'floating-star', 'floating-plane', 'huong-text'];
             
-            // Create floating hearts
             for (let i = 0; i < 15; i++) {
-                const heart = document.createElement('div');
-                heart.className = 'floating-heart';
-                heart.textContent = '💕';
-                heart.style.left = Math.random() * 100 + '%';
-                heart.style.top = Math.random() * 100 + '%';
-                heart.style.animationDelay = Math.random() * 6 + 's';
-                container.appendChild(heart);
-            }
-            
-            // Create floating stars
-            for (let i = 0; i < 20; i++) {
-                const star = document.createElement('div');
-                star.className = 'floating-star';
-                star.textContent = '⭐';
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                star.style.animationDelay = Math.random() * 4 + 's';
-                container.appendChild(star);
-            }
-            
-            // Create floating planes
-            for (let i = 0; i < 5; i++) {
-                const plane = document.createElement('div');
-                plane.className = 'floating-plane';
-                plane.textContent = '✈️';
-                plane.style.top = Math.random() * 80 + '%';
-                plane.style.animationDelay = Math.random() * 8 + 's';
-                container.appendChild(plane);
-            }
-            
-            // Create floating "bé" and "em" text
-            const vietnameseTexts = ['bé ❤️', 'em 💕', 'my love', 'beautiful'];
-            for (let i = 0; i < 8; i++) {
-                const textEl = document.createElement('div');
-                textEl.className = 'huong-text';
-                textEl.textContent = vietnameseTexts[Math.floor(Math.random() * vietnameseTexts.length)];
-                textEl.style.left = Math.random() * 100 + '%';
-                textEl.style.top = Math.random() * 100 + '%';
-                textEl.style.animationDelay = Math.random() * 10 + 's';
-                container.appendChild(textEl);
+                const element = document.createElement('div');
+                const randomIndex = Math.floor(Math.random() * elements.length);
+                element.textContent = elements[randomIndex];
+                element.className = classes[randomIndex];
+                element.style.left = Math.random() * 100 + '%';
+                element.style.top = Math.random() * 100 + '%';
+                element.style.animationDelay = Math.random() * 5 + 's';
+                container.appendChild(element);
             }
         }
 
         // Photo upload functionality
-        function setupPhotoUpload() {
+        function initPhotoUpload() {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
-            const photoGallery = document.getElementById('photoGallery');
-            let photos = [];
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+        }
 
-            uploadArea.addEventListener('click', () => {
-                fileInput.click();
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            processFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = Array.from(e.target.files);
+            processFiles(files);
+        }
+
+        function processFiles(files) {
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        addPhoto(e.target.result, file.name);
+                    };
+                    reader.readAsDataURL(file);
+                }
             });
+        }
 
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            });
-
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('dragover');
-            });
-
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                const files = Array.from(e.dataTransfer.files);
-                handleFiles(files);
-            });
-
-            fileInput.addEventListener('change', (e) => {
-                const files = Array.from(e.target.files);
-                handleFiles(files);
-            });
-
-            function handleFiles(files) {
-                files.forEach(file => {
-                    if (file.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const photoData = {
-                                id: Date.now() + Math.random(),
-                                src: e.target.result,
-                                name: file.name
-                            };
-                            photos.push(photoData);
-                            displayPhotos();
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                });
-            }
-
-            function displayPhotos() {
-                photoGallery.innerHTML = '';
-                photos.forEach(photo => {
-                    const photoItem = document.createElement('div');
-                    photoItem.className = 'photo-item';
-                    photoItem.innerHTML = `
-                        <img src="${photo.src}" alt="${photo.name}">
-                        <button class="photo-delete" onclick="deletePhoto(${photo.id})">×</button>
-                    `;
-                    photoGallery.appendChild(photoItem);
-                });
-            }
-
-            window.deletePhoto = function(photoId) {
-                photos = photos.filter(photo => photo.id !== photoId);
-                displayPhotos();
+        function addPhoto(src, name) {
+            const photo = {
+                id: photoIdCounter++,
+                src: src,
+                name: name,
+                timestamp: new Date().toISOString()
             };
+            photos.push(photo);
+            renderPhotoGallery();
+            showSuccessMessage(`Added "${name}" to gallery! 💕`);
+        }
+
+        function removePhoto(id) {
+            photos = photos.filter(photo => photo.id !== id);
+            renderPhotoGallery();
+            showSuccessMessage('Photo removed from gallery!');
+        }
+
+        function renderPhotoGallery() {
+            const gallery = document.getElementById('photoGallery');
+            const counter = document.getElementById('photoCounter');
+            
+            gallery.innerHTML = '';
+            
+            if (photos.length === 0) {
+                counter.textContent = 'No photos uploaded yet';
+                return;
+            }
+            
+            counter.textContent = `${photos.length} photo${photos.length !== 1 ? 's' : ''} in gallery`;
+            
+            photos.forEach(photo => {
+                const photoItem = document.createElement('div');
+                photoItem.className = 'photo-item';
+                photoItem.innerHTML = `
+                    <img src="${photo.src}" alt="${photo.name}">
+                    <div class="photo-controls">
+                        <button class="photo-btn" onclick="downloadPhoto(${photo.id})" title="Download">📥</button>
+                        <button class="photo-btn" onclick="removePhoto(${photo.id})" title="Remove">❌</button>
+                    </div>
+                `;
+                gallery.appendChild(photoItem);
+            });
+        }
+
+        function downloadPhoto(id) {
+            const photo = photos.find(p => p.id === id);
+            if (photo) {
+                const link = document.createElement('a');
+                link.href = photo.src;
+                link.download = photo.name;
+                link.click();
+                showSuccessMessage(`Downloaded "${photo.name}"! 📥`);
+            }
+        }
+
+        function downloadAllPhotos() {
+            if (photos.length === 0) {
+                showSuccessMessage('No photos to download!', 'error');
+                return;
+            }
+            
+            photos.forEach(photo => {
+                const link = document.createElement('a');
+                link.href = photo.src;
+                link.download = photo.name;
+                link.click();
+            });
+            showSuccessMessage(`Downloaded all ${photos.length} photos! 📥💕`);
+        }
+
+        function clearAllPhotos() {
+            if (photos.length === 0) {
+                showSuccessMessage('Gallery is already empty!', 'error');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to remove all ${photos.length} photos?`)) {
+                photos = [];
+                renderPhotoGallery();
+                showSuccessMessage('Gallery cleared! 🗑️');
+            }
+        }
+
+        function createPhotoZip() {
+            if (photos.length === 0) {
+                showSuccessMessage('No photos to pack!', 'error');
+                return;
+            }
+            showSuccessMessage(`Created photo pack with ${photos.length} photos! 📦💕`);
+        }
+
+        function showSuccessMessage(message, type = 'success') {
+            const messageEl = document.getElementById('successMessage');
+            messageEl.innerHTML = `<div class="success-message">${message}</div>`;
+            setTimeout(() => {
+                messageEl.innerHTML = '';
+            }, 3000);
         }
 
         // Initialize everything
         function init() {
-            createBackgroundElements();
-            setupPhotoUpload();
-            updateCountdown();
+            createFloatingElements();
+            initPhotoUpload();
             updateFlightInfo();
+            updateCountdown();
             
-            // Update every second
-            setInterval(() => {
-                updateCountdown();
-                updateFlightInfo();
-            }, 1000);
+            // Update countdown every second
+            setInterval(updateCountdown, 1000);
+            
+            // Update flight info every 30 seconds
+            setInterval(updateFlightInfo, 30000);
         }
 
         // Start when page loads
-        window.addEventListener('load', init);
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
